@@ -27,7 +27,6 @@ create table Role(
 create table Account(
 	Email nvarchar(255) primary key, --(Email) ràng buộc khóa chính cho email
 	Password nvarchar(50) not null, -- (Mật khẩu)
-	RoleID nvarchar(10) not null, --(Mã phân quyền)
 	FirstName nvarchar(50) not null, -- (Họ)
 	LastName nvarchar(50) not null, -- (Tên)
 	Phone varchar(20) unique not null, --(Số điện thoại) ràng buộc số điện thoại là duy nhất
@@ -37,15 +36,11 @@ create table Account(
 	constraint CK_EMAIL check (Email LIKE '%@gmail.com'),
 
 	--kiểm tra mật khẩu phải từ 9 ký tự và không được quá 50 ký tự
-	constraint CK_PASS check (Password <= 9 and Password <= 50 ),
+	CONSTRAINT CK_PASS CHECK (len(Password) BETWEEN 9 AND 50),
 
 	-- kiểm tra số điện thoại phù hợp ở VN
 	constraint CK_PHONE check (Phone LIKE '0[235789][0-9]{8,9}' OR Phone LIKE '0[2469][0-9]{8}') ,
-
-	-- tham chiếu khóa ngoại đến thực thể Role
-	constraint FK_AC_R foreign key (RoleID) references Role(RoleID),
 )
-
 
 
 
@@ -79,6 +74,7 @@ create table Flights(
 	ArriveTime time not null, -- (giờ hạ cánh)
 	FlightHours int not null, -- (giờ bay)
 	FlightMinutes int not null, -- (phút bay)
+	Status nvarchar(10) not null default N'Opening', --(Trạng thái)
 	PriceTicket decimal(10,2) not null, --(giá vé máy bay)
 
 	-- kiểm tra giờ khởi hành và giờ hạ cánh phải phù hợp 
@@ -98,20 +94,23 @@ create table Flights(
 	constraint FK_AF_ARR foreign key (ArriveID) references Airport(AirportID),
 )
 
--- Huỳnh Gia Huy (4/5/2023) tạo bảng lưu trữ thông tin chi tiết chuyến bay 
-create table FLightDetail(
-	FDetailID nvarchar(10) primary key, -- (mã chi tiết chuyến bay ) ràng buộc khóa chính cho thuộc tính này
+	--Huỳnh Gia Huy (3/5/2023) tạo bảng Transit lưu thông tin các dừng chân của các chuyến bay
+CREATE TABLE Transit(
 	FLightID nvarchar(10) not null, --(mã chuyến bay)
 	TransitAirport nvarchar(3), --(mã sân bay trung gian) có thể null
-	TransitTime time, -- (Thời gian dừng nếu có trạm trung gian) 
-	Note text, -- (Ghi chú)
+	TransitHours int, -- (Thời gian dừng nếu có trạm trung gian)
+	TransitMinutes int, -- (Thời gian dừng nếu có trạm trung gian)
+
+	-- ta dùng khóa chính kết hợp cho bảng này
+	constraint PK_Transit primary key (FLightID, TransitAirport),
 
 	-- tham chiếu khóa ngoại đến thực thể Flights
-	constraint FK_FD_F foreign key (FLightID) references Flights(FlightID),
+	constraint FK_Transit_F foreign key (FLightID) references Flights(FlightID),
 
 	-- tham chiếu khóa ngoại đến thực thể Airport
-	constraint FK_FD_A foreign key (TransitAirport) references Airport(AirportID)
+	constraint FK_Transit_A foreign key (TransitAirport) references Airport(AirportID),
 )
+
 
 
 -- Huỳnh Gia Huy (4/5/2023) tạo bảng lưu trữ thông tin ưu đãi
@@ -129,6 +128,10 @@ create table Voucher (
 	CHECK (ExpiryDate > EffectiveDate)
 )
 
+create table StatusOrder(
+	StatusID nvarchar(3) primary key, --(mã trạng thái) đặt khóa chính cho thuộc tính này 
+	Description nvarchar(50) not null, -- (mô tả trạng thái)
+)
 
 
 -- Huỳnh Gia Huy (4/5/2023) tạo bảng lưu trữ thông tin đặt đơn vé 
@@ -137,8 +140,8 @@ create table OrderTicket(
 	FlightID nvarchar(10) not null, -- (Mã chuyến bay)
 	Quantity int not null, --(số lượng hành khách)
 	Email nvarchar(255) not null, --(email người đặt vé)
-	Status nvarchar(50) not null , --(Trạng thái của đơn vé)
-	Total decimal(10,2) not null, -- (Tổng tiền chưa bao gồm giảm giá)
+	StatusID nvarchar(3) not null, -- (mã trạng thái đơn vé)
+	Total decimal(10,2) not null, -- (Tổng tiền)
 
 
 	-- tham chiếu khóa ngoại đến thực thể FLights 
@@ -146,8 +149,10 @@ create table OrderTicket(
 
 	-- tham chiếu khóa ngoại đến thực thể Account
 	constraint FK_O_A foreign key (Email) references Account(Email),
-)
 
+	-- tham chiếu khóa ngoại đến thực thể StatusOrder
+	constraint FK_O_SO foreign key (StatusID) references StatusOrder(StatusID),
+)
 
 -- Huỳnh Gia Huy (4/5/2023) tạo bảng lưu thông tin hành khách của chuyến bay
 create table Passengers(
@@ -197,19 +202,16 @@ create table Tickets(
 	TicketID nvarchar(10) primary key , -- (mã vé) đặt khóa chính cho thuộc tính này
 	BillID nvarchar(10) not null, -- (mã hóa đơn)
 	PassengerID nvarchar(10) unique not null, -- (mã hành khách) ràng buộc duy nhất cho thuộc tính này
-	PFirstName nvarchar(50) not null, -- (họ hành khách)
-	PLastName nvarchar(50) not null, -- (tên hành khách)
 	FlightID nvarchar(10) not null, -- (mã chuyến bay )
-	DepartureDate date not null, -- (ngày khởi hành)
-	DapartureTime time not null, --(giờ khởi hành)
-	DepartureID nvarchar(3) not null, -- (sân bay khởi hành)
-	ArriveID nvarchar(3) not null , -- (sân bay hạ cánh)
 		
+	--tham chiếu khóa ngoại đến thực thể Bill
+	constraint FK_T_B foreign key (BillID) references Bill(BillID),
 
-	-- tham chiếu khóa ngoại đến thực thể Airport
-	constraint FK_T_AP_DEP foreign key (DepartureID) references Airport(AirportID),
-	constraint FK_T_AP_ARR foreign key (ArriveID) references Airport(AirportID)
+	--tham chiếu khóa ngoại đến thực thể Flights
+	constraint FK_T_F foreign key (FlightID) references Flights(FlightID),
 
+	-- tham chiếu khóa ngoại đến thực thể Passengers 
+	constraint FK_T_P foreign key (PassengerID) references Passengers(PassengerID),
 )
 
 
@@ -251,6 +253,8 @@ create table CancelTicket(
 	-- tham chiếu khóa ngoại đến thực thể Account
 	constraint FK_CT_AC foreign key (Email) references Account(Email)
 )
+
+
 
 
 
